@@ -1,0 +1,17 @@
+{
+  "name": "thypit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hypit 工作台：官方项目目录的薄封装（CLI 优先）",
+  "type": "module",
+  "bin": {
+    "twb": "bin/twb.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "license": "UNLICENSED"
+}
