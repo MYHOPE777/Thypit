@@ -222,8 +222,8 @@ build(run) 前置条件：
 
 ## 10. 里程碑
 
-- **M0（半天）**：`twb list/check/plan/price` + 项目发现 + JSON 输出稳定。
-- **M1（半天）**：`twb build/status/get/review/ledger` + 预算闸门 + `twb new`。
+- **M0（半天）**：`twb list/check/plan/price` + 项目发现 + JSON 输出稳定。（已完成）
+- **M1（半天）**：`twb build/status/get/review/ledger` + 预算闸门 + `twb new`。（已完成；真实 5s h3 冒烟一次，估算 ¥0.55）
 - **M2（半天）**：本地 Web（`twb serve`）：项目树、文件预览、Builds/Results、Review、Ledger、studio 按钮。
 - **M3（可选）**：参考片下载（`hypit download`）、`hypit media probe/frames` 预览、多项目切换。
 

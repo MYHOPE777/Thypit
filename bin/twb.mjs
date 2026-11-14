@@ -1,27 +1,48 @@
-// twb · Hypit Workbench CLI（M0）
-// 只做官方命令的薄封装：check / plan / price，加上项目发现。不生成、不构建。
+// twb · Hypit Workbench CLI（M0–M1）
+// 只做官方命令的封装与四个自有小文件（review/ledger/workbench.json + .twb 状态快照）。
+// 不生成、不代理、不缓存官方结果。
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { findProject, listProject } from "../src/project.mjs";
-import { runHypit, resolveHypit } from "../src/hypit.mjs";
-import { planSummary, pricingSummary } from "../src/report.mjs";
-import { renderList, renderPlan, renderPricing } from "../src/format.mjs";
+import { runHypit, runHypitStream, resolveHypit } from "../src/hypit.mjs";
+import { planSummary, pricingSummary, statusSummary, ledgerSummary } from "../src/report.mjs";
+import { renderList, renderPlan, renderPricing, renderStatus, renderGate, renderLedger, renderNew } from "../src/format.mjs";
+import { evaluateGate, readState, stampPlan, stampPricing, statRun } from "../src/gate.mjs";
+import {
+  appendLedger, budgetOf, newProduction, patchLedgerBuildId, productionByBuild, productionOfRun,
+  readLedger, resultTarget, setBudget, writeReview,
+} from "../src/actions.mjs";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
+
+const VALUE_FLAGS = new Set([
+  "project", "hypit", "estimate", "budget", "verdict", "note", "reviewer",
+  "output", "to", "production", "add", "title", "build",
+]);
+const BOOL_FLAGS = new Set(["json", "help", "version", "force", "watch", "no-follow"]);
+
+function camel(flag) {
+  return flag.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+}
 
 function parseArgs(argv) {
   const out = { _: [], flags: {} };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--json") out.flags.json = true;
-    else if (a === "--project") out.flags.project = argv[++i];
-    else if (a === "--hypit") out.flags.hypit = argv[++i];
-    else if (a === "--help" || a === "-h") out.flags.help = true;
-    else if (a === "--version" || a === "-v") out.flags.version = true;
-    else if (a.startsWith("--")) throw usageError(`未知参数 ${a}`);
-    else out._.push(a);
+    if (!a.startsWith("--")) {
+      out._.push(a);
+      continue;
+    }
+    const name = a.slice(2);
+    if (VALUE_FLAGS.has(name)) {
+      const v = argv[++i];
+      if (v === undefined) throw usageError(`${a} 需要一个值`);
+      out.flags[camel(name)] = v;
+    } else if (BOOL_FLAGS.has(name)) {
+      out.flags[camel(name)] = true;
+    } else {
+      throw usageError(`未知参数 ${a}`);
+    }
   }
   return out;
 }
@@ -37,34 +58,33 @@ const USAGE = `twb ${VERSION} · Hypit Workbench
 用法: twb <命令> [参数] [--project <目录>] [--json]
 
 命令:
-  list                         列出项目、productions 与 runs
-  check <run>                  校验一个 Run（hypit check，免费）
-  plan  <run>                  执行计划（hypit plan --json，免费）
-  price <run>                  价目（hypit pricing --json，只读网络）
-  studio <run>                 打开官方 Studio（M2）
-  help                         这份帮助
+  list                                 列出项目 / productions / runs
+  new <production>                     建官方骨架（BRIEF/TREATMENT/PROGRESS + 四个空目录）
+  check <run>                          hypit check（免费，原样透传）
+  plan  <run>                          hypit plan --json（免费，落状态快照）
+  price <run>                          hypit pricing --json（只读网络，落状态快照）
+  build <run> [--estimate <cny>]       过 gate → build → status --watch
+  status <buildId> [--watch]           hypit status --json
+  get <buildId> --output <名>          取回到 productions/<t>/results/
+  review <buildId> <output> --verdict  写 review.json（approved|rejected|pending）
+  ledger <production> [--add <cny>]    花费汇总 / 手工记实付
+  studio <run>                         官方 Studio
 
 全局:
-  --project <目录>             项目根目录（默认从当前目录向上找 hypit.project）
-  --hypit <可执行文件>         指定 hypit（默认项目 node_modules/.bin/hypit）
-  --json                       稳定机器输出
+  --project <目录>   项目根（默认向上找 package.json 的 hypit.project）
+  --hypit <文件>     指定 hypit 可执行文件
+  --json             稳定机器输出
+  --budget <cny>     本次覆盖 production 预算（写入 workbench.json）
 `;
 
 async function main(argv) {
   const { _, flags } = parseArgs(argv);
   const cmd = _[0] || (flags.help ? "help" : "");
 
-  if (flags.version) {
-    console.log(VERSION);
-    return;
-  }
-  if (!cmd || cmd === "help" || flags.help) {
-    console.log(USAGE);
-    return;
-  }
+  if (flags.version) return void console.log(VERSION);
+  if (!cmd || cmd === "help" || flags.help) return void console.log(USAGE);
 
   const project = findProject(flags.project);
-  if (!project && cmd !== "list") throw usageError("不在 Hypit 项目里：加 --project <目录>，或在含 hypit.project 的目录下执行");
 
   if (cmd === "list") {
     const out = listProject({ project: flags.project });
@@ -72,49 +92,205 @@ async function main(argv) {
     return;
   }
 
-  const run = _[1];
-  if (!run) throw usageError(`${cmd} 需要 <run> 路径`);
-
-  const hypit = resolveHypit(project.root, flags.hypit);
-
-  if (cmd === "check") {
-    const r = await runHypit(hypit, ["check", run], { cwd: project.root, timeoutMs: 120000 });
-    if (r.stdout.trim()) console.log(r.stdout.trim());
-    if (r.stderr.trim()) console.error(r.stderr.trim());
-    if (r.code !== 0) process.exitCode = 1;
+  if (cmd === "new") {
+    const name = _[1];
+    if (!name) throw usageError("new 需要 <production> 名");
+    const root = project?.root || resolve(flags.project || process.cwd());
+    const budget = flags.budget !== undefined ? Number(flags.budget) : undefined;
+    const out = newProduction(root, name, { budgetCny: budget, title: flags.title });
+    console.log(flags.json ? JSON.stringify(out, null, 2) : renderNew(out));
     return;
   }
 
-  if (cmd === "plan") {
-    const r = await runHypit(hypit, ["plan", run, "--json"], { cwd: project.root, timeoutMs: 180000, json: true });
-    if (r.code !== 0) {
-      console.error(r.stderr.trim() || r.stdout.trim() || `hypit plan 退出码 ${r.code}`);
-      process.exitCode = 1;
+  if (!project) throw usageError("不在 Hypit 项目里：加 --project <目录>，或在含 hypit.project 的目录下执行");
+  const root = project.root;
+  const hypit = resolveHypit(root, flags.hypit);
+
+  if (cmd === "check" || cmd === "plan" || cmd === "price") {
+    const runRel = relRun(root, _[1] || usageError(`${cmd} 需要 <run> 路径`));
+    if (cmd === "check") {
+      const r = await runHypit(hypit, ["check", runRel], { cwd: root, timeoutMs: 120000 });
+      if (r.stdout.trim()) console.log(r.stdout.trim());
+      if (r.stderr.trim()) console.error(r.stderr.trim());
+      if (r.code !== 0) process.exitCode = 1;
       return;
     }
-    const s = planSummary(r.json);
-    console.log(flags.json ? JSON.stringify(s, null, 2) : renderPlan(s));
+    const json = await officialJson(root, hypit, [cmd === "plan" ? "plan" : "pricing", runRel, "--json"]);
+    const summary = cmd === "plan" ? planSummary(json) : pricingSummary(json);
+    const stat = statRun(root, runRel);
+    if (stat) {
+      if (cmd === "plan") stampPlan(root, runRel, stat, summary);
+      else stampPricing(root, runRel, stat, summary);
+    }
+    console.log(flags.json ? JSON.stringify(summary, null, 2) : cmd === "plan" ? renderPlan(summary) : renderPricing(summary));
     return;
   }
 
-  if (cmd === "price") {
-    const r = await runHypit(hypit, ["pricing", run, "--json"], { cwd: project.root, timeoutMs: 180000, json: true });
-    if (r.code !== 0) {
-      console.error(r.stderr.trim() || r.stdout.trim() || `hypit pricing 退出码 ${r.code}`);
-      process.exitCode = 1;
-      return;
+  if (cmd === "build") {
+    const runRel = relRun(root, _[1] || usageError("build 需要 <run> 路径"));
+    if (flags.budget !== undefined && flags.budget !== "") {
+      const prod = flags.production || productionOfRun(runRel);
+      if (!prod) throw usageError("--budget 需要 run 在 productions/<name>/ 下，或加 --production");
+      setBudget(root, prod, Number(flags.budget));
     }
-    const s = pricingSummary(r.json);
-    console.log(flags.json ? JSON.stringify(s, null, 2) : renderPricing(s));
+    return void buildFlow(root, hypit, runRel, flags);
+  }
+
+  if (cmd === "status") {
+    const id = _[1] || usageError("status 需要 <buildId>");
+    if (flags.watch) {
+      const r = await runHypitStream(hypit, ["status", id, "--watch"], { cwd: root });
+      if (r.code !== 0) process.exitCode = 1;
+    }
+    const json = await officialJson(root, hypit, ["status", id, "--json"]);
+    const s = statusSummary(json);
+    console.log(flags.json ? JSON.stringify(s, null, 2) : renderStatus(s));
+    const outcome = s.build?.work?.outcome;
+    if (outcome === "failed" || outcome === "cancelled") process.exitCode = 1;
+    return;
+  }
+
+  if (cmd === "get") {
+    const id = _[1] || usageError("get 需要 <buildId>");
+    const output = flags.output || usageError("get 需要 --output <名>");
+    const production = flags.production || productionByBuild(root, id);
+    if (!production) throw usageError("找不到这个 build 属于哪个 production：加 --production <名>");
+    const target = flags.to
+      ? resolve(flags.to)
+      : resultTarget(root, production, output, id, { force: !!flags.force });
+    const json = await officialJson(root, hypit, ["get", id, "--output", output, "--to", target.path, "--json"]);
+    const out = {
+      format: "twb.get@1",
+      buildId: id,
+      production,
+      output,
+      path: json.path || target.path,
+      renamed: target.renamed === true,
+    };
+    console.log(flags.json ? JSON.stringify(out, null, 2) : `已取回 ${out.path}${out.renamed ? "（目标已存在，改用了带 build id 的文件名）" : ""}`);
+    return;
+  }
+
+  if (cmd === "review") {
+    const id = _[1] || usageError("review 需要 <buildId>");
+    const output = _[2] || usageError("review 需要 <output>");
+    const verdict = flags.verdict || usageError("review 需要 --verdict approved|rejected|pending");
+    const production = flags.production || productionByBuild(root, id);
+    if (!production) throw usageError("找不到这个 build 属于哪个 production：加 --production <名>");
+    const out = writeReview(root, production, { buildId: id, output, verdict, note: flags.note, reviewer: flags.reviewer });
+    console.log(flags.json ? JSON.stringify(out, null, 2) : `已写 review：${id} / ${output} = ${verdict}（${out.path}）`);
+    return;
+  }
+
+  if (cmd === "ledger") {
+    const production = _[1] || usageError("ledger 需要 <production>");
+    if (flags.add !== undefined) {
+      if (!flags.build) throw usageError("ledger --add 需要 --build <buildId>");
+      const entry = {
+        buildId: flags.build,
+        run: "",
+        plannedRequests: 0,
+        providerRequests: 0,
+        estimateCny: null,
+        pricingDocs: [],
+        actualCny: Number(flags.add),
+        note: flags.note || "",
+        at: new Date().toISOString(),
+      };
+      appendLedger(root, production, entry);
+    }
+    const s = ledgerSummary(production, readLedger(root, production));
+    console.log(flags.json ? JSON.stringify(s, null, 2) : renderLedger(s));
     return;
   }
 
   if (cmd === "studio") {
-    console.log("studio 在 M2 提供；现在可直接跑：hypit studio --run " + run);
+    const runRel = relRun(root, _[1] || usageError("studio 需要 <run> 路径"));
+    const r = await runHypitStream(hypit, ["studio", "--run", runRel], { cwd: root });
+    if (r.code !== 0) process.exitCode = 1;
     return;
   }
 
   throw usageError(`未知命令 ${cmd}`);
+}
+
+async function buildFlow(root, hypit, runRel, flags) {
+  const production = flags.production || productionOfRun(runRel);
+  if (!production) throw usageError("run 必须在 productions/<name>/ 下才能记账；或加 --production <名>");
+
+  const stat = statRun(root, runRel);
+  const state = readState(root, runRel);
+  const budget = budgetOf(root, production);
+  const gate = evaluateGate({
+    runRel,
+    runStat: stat,
+    state,
+    budgetCny: budget.budgetCny,
+    estimateCny: flags.estimate ?? null,
+  });
+  if (!gate.ok) {
+    console.log(flags.json ? JSON.stringify({ format: "twb.build@1", ok: false, gate }, null, 2) : renderGate(gate));
+    process.exitCode = 1;
+    return;
+  }
+
+  const entry = {
+    buildId: "",
+    run: runRel,
+    plannedRequests: gate.planned?.requests?.total ?? 0,
+    providerRequests: gate.providerRequests,
+    estimateCny: gate.estimateCny,
+    pricingDocs: (gate.priced?.groups || []).map((g) => g.pricingUrl).filter(Boolean),
+    actualCny: null,
+    note: "",
+    at: new Date().toISOString(),
+  };
+  appendLedger(root, production, entry);
+
+  const args = ["build", runRel];
+  if (flags.title) args.push("--title", flags.title);
+  args.push("--json");
+  const submitted = await runHypit(hypit, args, { cwd: root, timeoutMs: 180000, json: true });
+  if (submitted.code !== 0) {
+    patchLedgerBuildId(root, production, entry.at, "", { note: "提交失败" });
+    console.error(submitted.stderr.trim() || submitted.stdout.trim() || `hypit build 退出码 ${submitted.code}`);
+    process.exitCode = 1;
+    return;
+  }
+  const buildId = submitted.json?.build?.id;
+  if (!buildId) {
+    patchLedgerBuildId(root, production, entry.at, "", { note: "hypit build 没有返回 build id" });
+    throw new Error("hypit build 没有返回 build id");
+  }
+  patchLedgerBuildId(root, production, entry.at, buildId);
+  console.log(`build 已提交：${buildId}（ledger 已记估算 ¥${gate.estimateCny ?? 0}）`);
+
+  if (flags.noFollow || flags.json) {
+    const json = await officialJson(root, hypit, ["status", buildId, "--json"]);
+    const s = statusSummary(json);
+    const out = { format: "twb.build@1", ok: true, buildId, gate, entry: { ...entry, buildId }, status: s };
+    console.log(flags.json ? JSON.stringify(out, null, 2) : renderStatus(s));
+    return;
+  }
+
+  const follow = await runHypitStream(hypit, ["status", buildId, "--watch"], { cwd: root });
+  const json = await officialJson(root, hypit, ["status", buildId, "--json"]);
+  const s = statusSummary(json);
+  console.log(renderStatus(s));
+  if (follow.code !== 0 || s.build?.work?.outcome === "failed" || s.build?.work?.outcome === "cancelled") {
+    process.exitCode = 1;
+  }
+}
+
+async function officialJson(root, hypit, args) {
+  const r = await runHypit(hypit, args, { cwd: root, timeoutMs: 180000, json: true });
+  if (r.code !== 0) throw new Error(r.stderr.trim() || r.stdout.trim() || `hypit ${args[0]} 退出码 ${r.code}`);
+  return r.json;
+}
+
+function relRun(root, p) {
+  const abs = isAbsolute(p) ? p : join(root, p);
+  return relative(root, resolve(abs)).split("\\").join("/");
 }
 
 main(process.argv.slice(2)).catch((err) => {

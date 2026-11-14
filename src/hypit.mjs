@@ -1,7 +1,7 @@
 // 唯一的 hypit 调用点：解析可执行文件、execFile、超时、JSON 解析、错误映射。
 // 不拼 shell 字符串，不读密钥，不改环境。
 
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { delimiter, dirname, join, resolve } from "node:path";
 
@@ -80,5 +80,14 @@ export function runHypit(bin, args, { cwd = process.cwd(), timeoutMs = DEFAULT_T
         done(out);
       },
     );
+  });
+}
+
+/** 前台流式执行（status --watch / build --follow 用）：stdio 继承，返回退出码。 */
+export function runHypitStream(bin, args, { cwd = process.cwd() } = {}) {
+  return new Promise((done, reject) => {
+    const child = spawn(bin, args, { cwd, stdio: "inherit", env: process.env });
+    child.on("error", (err) => reject(new Error(`无法执行 hypit（${bin}）：${err.message}`)));
+    child.on("close", (code, signal) => done({ code: code ?? 1, signal }));
   });
 }

@@ -72,3 +72,43 @@ function kb(bytes) {
   const n = Number(bytes) || 0;
   return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`;
 }
+
+export function renderStatus(s = {}) {
+  if (!s.found) return "build 不存在（status --json 没有返回 build）";
+  const b = s.build;
+  const lines = [];
+  lines.push(`${b.id}${b.title ? ` · ${b.title}` : ""}`);
+  lines.push(`work: ${b.work.state}${b.work.outcome ? ` (${b.work.outcome})` : ""}${b.work.requests ? ` · requests ${b.work.requests.completed}/${b.work.requests.total}` : ""}`);
+  lines.push(`result: ${b.result.state}${b.result.outputCount ? ` · ${b.result.outputCount} output(s)` : ""}`);
+  if (b.targets.length) lines.push(`targets: ${b.targets.join(", ")}`);
+  if (b.failure) lines.push(`failure: ${b.failure}`);
+  if (b.attention) lines.push(`attention: ${b.attention}`);
+  for (const o of b.operations) lines.push(`  ${o.endpoint}: ${o.state}${o.count == null ? "" : ` ×${o.count}`}${o.failure ? ` — ${o.failure}` : ""}`);
+  return lines.join("\n");
+}
+
+export function renderGate(g = {}) {
+  const lines = [];
+  if (g.ok) {
+    lines.push(`gate ok · 预算 ¥${g.budgetCny} · 估算 ¥${g.estimateCny ?? 0} · 付费请求 ${g.providerRequests}`);
+    return lines.join("\n");
+  }
+  lines.push(`gate 拒绝（${g.code}）`);
+  for (const r of g.reasons) lines.push(`  - ${r}`);
+  return lines.join("\n");
+}
+
+export function renderLedger(s = {}) {
+  const lines = [];
+  lines.push(`${s.production} · ${s.totals.count} 条 · 估算 ¥${s.totals.estimateCny} · 实付 ¥${s.totals.actualCny} · 待填 ${s.totals.open}`);
+  for (const e of s.entries) {
+    const id = e.buildId || "(未 build)";
+    const pay = `估算 ${e.estimateCny == null ? "?" : `¥${e.estimateCny}`} / 实付 ${e.actualCny == null ? "?" : `¥${e.actualCny}`}`;
+    lines.push(`  ${e.at}  ${id}  ${pay}${e.note ? `  ${e.note}` : ""}`);
+  }
+  return lines.join("\n");
+}
+
+export function renderNew(out = {}) {
+  return [`已建 productions/${out.production}（预算 ¥${out.budgetCny}）`, ...out.created.map((c) => `  + ${c}`)].join("\n");
+}
