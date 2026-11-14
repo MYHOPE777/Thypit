@@ -4,7 +4,8 @@
 
 - 状态：设计稿，**未写代码**
 - 旧仓库 `/Users/tangsir/hypit`：只停手、保持现状，不回改、不复用代码（只复用经验与教训）
-- 本仓库：`/Users/tangsir/hypit-workbench`（名字暂定，可改）
+- 本仓库：`~/Thypit`，远端 `https://github.com/MYHOPE777/Thypit`
+- 形态：**先 CLI（M0–M1），Web 留到 M2**
 
 ---
 
@@ -85,15 +86,34 @@
 目录（代码 ≤ 6 个文件，预算 1200–1600 行）：
 
 ```text
-hypit-workbench/
-├── src/server.mjs        # http 路由 + 静态文件（≤250 行）
-├── src/hypit.mjs         # CLI 封装（≤200 行）
-├── src/project.mjs       # 发现项目 / 读文件 / 解析 builds 与 results（≤250 行）
-├── src/actions.mjs       # 写动作：review / ledger / 新建 production / build（≤300 行）
+Thypit/
+├── bin/twb.mjs           # CLI 入口（≤120 行）：参数解析、命令分派、退出码
+├── src/hypit.mjs         # CLI 封装（≤200 行）：唯一 execFile 调用点 + JSON 解析
+├── src/project.mjs       # 发现项目 / 读官方文件 / 解析 builds 与 results（≤250 行）
 ├── src/gate.mjs          # 预算闸门：plan→pricing→确认→build（≤150 行）
-├── web/index.js web/app.css web/index.html  # 原生 ES module，无框架
-└── test/*.test.mjs       # node --test，只测纯函数与 gate
+├── src/actions.mjs       # 写动作：review / ledger / 新建 production（≤250 行）
+├── src/server.mjs        # M2：http + 静态文件（≤250 行）
+├── web/                  # M2：原生 ES module，无框架
+└── test/*.test.mjs       # node --test
 ```
+
+### CLI 命令表（M0–M1 的全部界面）
+
+```bash
+twb list                          # 列出项目 / productions / runs
+twb new <production>              # 建官方骨架（M1）
+twb check <run>                   # hypit check
+twb plan <run>                    # plan --json，打印 targets / requests / providers 摘要
+twb price <run>                   # pricing --json，打印价目分组与文档链接
+twb build <run> --budget 10       # 过 gate 后 build --follow，流式打印
+twb status <buildId>              # status --json
+twb get <buildId> --output <名>   # get 到 productions/<t>/results/
+twb review <buildId> <output>     # 写 review.json（approved|rejected|pending）
+twb ledger <production>           # 打印花费汇总；--add 手工记实付
+twb studio <run>                  # 拉起官方 studio
+```
+
+所有命令都有 `--json`，输出稳定结构，便于以后 Web 复用同一批函数。
 
 ## 5. 主流程（一条片子的时序）
 
@@ -202,10 +222,10 @@ build(run) 前置条件：
 
 ## 10. 里程碑
 
-- **M0（半天）**：发现项目 + 文件树 + check/plan/pricing 三个按钮 + 日志面板。
-- **M1（半天）**：build/status/get + gate + ledger。
-- **M2（半天）**：review + Results 区 + studio 启动。
-- **M3（可选半天）**：新 production 向导、参考片下载（`hypit download`）、`hypit media probe/frames` 预览。
+- **M0（半天）**：`twb list/check/plan/price` + 项目发现 + JSON 输出稳定。
+- **M1（半天）**：`twb build/status/get/review/ledger` + 预算闸门 + `twb new`。
+- **M2（半天）**：本地 Web（`twb serve`）：项目树、文件预览、Builds/Results、Review、Ledger、studio 按钮。
+- **M3（可选）**：参考片下载（`hypit download`）、`hypit media probe/frames` 预览、多项目切换。
 
 每个里程碑结束跑 `node --test` 与一次真实官方调用（h3 5s，费用 ≤ ¥1，需你确认后才跑）。
 
@@ -216,8 +236,15 @@ build(run) 前置条件：
 - 密钥不进仓库：Provider 凭证由 `hypit auth` / Profile 管理，工作台不读不写。
 - 仓库只存代码：`projects/`、`*.mp4`、`results/`、`.hypit/` 全部 `.gitignore`。
 
-## 12. 需要你确认的三件事
+## 12. 已定 / 待定
 
-1. **仓库名与位置**：`~/hypit-workbench` 可以吗？远端要私有仓库还是先本地？
-2. **项目数据放哪**：所有视频项目放在 `~/hypit-workbench/projects/<name>/`（单仓多项目）还是各自独立目录、工作台用 `--project` 指过去？
-3. **界面形态**：v1 就做本地 Web（`127.0.0.1` 随机端口），还是先纯 CLI、Web 留到 M2？
+已定：
+
+1. 仓库：`~/Thypit`，远端 `https://github.com/MYHOPE777/Thypit`。
+2. 形态：先 CLI（M0–M1），Web 在 M2。
+3. 旧仓库只停手，不回改、不复用代码。
+
+待定（不阻塞 M0）：
+
+1. **视频项目放哪**：单仓 `projects/<name>/` 还是各自独立目录、用 `--project` 指过去。M0 先支持「任意目录 + 一个项目清单文件 `projects.json`」，两种都能覆盖。
+2. 远端是否私有（推送时如果是公开仓库，先把 README 里的敏感信息清一遍）。
