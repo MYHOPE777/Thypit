@@ -257,12 +257,22 @@ export function createAppServer({ root, deps = {} } = {}) {
 
     "POST /api/get": async (_req, _url, data) => {
       const buildId = String(data.buildId || "");
-      const output = String(data.output || "");
+      let output = String(data.output || "").trim();
       const production = data.production || actions.productionByBuild(root, buildId);
       if (!production) {
         const err = new Error("找不到这个 build 属于哪个 production");
         err.status = 404;
         throw err;
+      }
+      if (!output) {
+        // 输出名不填时按官方 status 里的 targets 取第一个（run 里 <target output="..."/> 声明的）
+        const st = await hypit(["status", buildId, "--json"], { json: true });
+        output = st.json?.build?.targets?.[0] || "";
+        if (!output) {
+          const err = new Error("这个 build 没有声明 output；请在 run 里加 <target output=\"gen.video\"/>");
+          err.status = 400;
+          throw err;
+        }
       }
       const target = actions.resultTarget(root, production, output, buildId, { force: !!data.force });
       // get 的人话输出（"+ Exported ..."）不是 JSON，别按 JSON 解析

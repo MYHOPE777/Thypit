@@ -146,6 +146,36 @@ test("POST /api/get 落盘并返回相对路径（get 不是 JSON 也不崩）",
   }
 });
 
+test("POST /api/get 不填 output 时用 status 的 targets[0]", async () => {
+  const root = makeProject();
+  const server = createAppServer({
+    root,
+    deps: {
+      hypit: async (args) => {
+        if (args[0] === "status") {
+          return { code: 0, stdout: "", stderr: "", json: { format: "hypit.cli-status@1", build: { id: "bld_x", targets: ["gen.video"], work: {}, result: {} } } };
+        }
+        if (args[0] === "get") {
+          writeFileSync(args[args.indexOf("--to") + 1], Buffer.alloc(2048, 1));
+          return { code: 0, stdout: "+ Exported gen.video\n", stderr: "", json: null };
+        }
+        return { code: 0, stdout: "", stderr: "", json: { builds: [] } };
+      },
+    },
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const res = await fetch(`${base}/api/get`, { method: "POST", body: JSON.stringify({ buildId: "bld_x", production: "promo" }) });
+    assert.equal(res.status, 200);
+    const out = await res.json();
+    assert.equal(out.output, "gen.video");
+    assert.ok(existsSync(join(root, out.path)));
+  } finally {
+    server.close();
+  }
+});
+
 test("价目拿不到 → 502 PRICE_UNKNOWN（不是「免费」）", async () => {
   const root = makeProject();
   const server = createAppServer({

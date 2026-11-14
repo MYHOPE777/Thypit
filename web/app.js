@@ -77,7 +77,7 @@ function renderBuilds() {
         <td>${esc(b.outputCount ?? 0)} 个</td>
         <td class="ops">
           <button data-act="status">状态</button>
-          <input class="out" placeholder="输出名，如 gen.video" value="${esc(b.targets?.[0] || "")}" />
+          <input class="out" placeholder="输出名，不填自动取 targets[0]" value="${esc(b.targets?.[0] || "")}" />
           <button data-act="get">取回</button>
           <select class="verdict"><option value="pending">pending</option><option value="approved">approved</option><option value="rejected">rejected</option></select>
           <button data-act="review">审</button>
@@ -157,7 +157,7 @@ async function runAction(act, runRel, prod, row) {
   }
   if (act === "plan") {
     const s = await post("/api/plan", { run: runRel });
-    log(`计划 ${runRel}：targets ${s.targets.length}、请求 ${s.requests.total}（provider ${s.providers.filter((p) => !p.local).length}）、可选项 ${s.choiceCount}\n` +
+    log(`计划 ${runRel}：targets ${s.targets.length}、请求 ${s.requests.total}（provider ${s.providers.filter((p) => !p.local).length}）、待填输入 ${s.needs.length}\n` +
       s.providers.map((p) => `· ${p.capability} → ${p.endpoint || "(本地)"}${p.binding ? ` binding=${p.binding}` : ""}${p.pricingUrl ? ` ${p.pricingUrl}` : ""}`).join("\n"));
     return;
   }
@@ -207,7 +207,9 @@ document.addEventListener("click", async (ev) => {
       if (act === "status") {
         const id = btn.closest("tr").dataset.build;
         const out = await api(`/api/status?id=${encodeURIComponent(id)}`);
-        log(`状态 ${id}：${JSON.stringify(out.build?.work || out, null, 0)}`);
+        const target = out.build?.targets?.[0];
+        if (target && !$(".out", btn.closest("tr")).value) $(".out", btn.closest("tr")).value = target;
+        log(`状态 ${id}：${JSON.stringify(out.build?.work || out, null, 0)}${target ? ` · output ${target}` : ""}`);
       } else if (act === "get") {
         const tr = btn.closest("tr");
         const buildId = tr.dataset.build;
