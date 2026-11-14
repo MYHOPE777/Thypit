@@ -88,6 +88,15 @@ async function sniffType(abs) {
   }
 }
 
+/** 产物按实际类型分类：官方 output 常无扩展名，靠文件头。 */
+async function mediaKind(abs, type) {
+  const t = type || MEDIA[extname(abs).toLowerCase()] || (await sniffType(abs));
+  if (t.startsWith("video/")) return "video";
+  if (t.startsWith("audio/")) return "audio";
+  if (t.startsWith("image/")) return "image";
+  return "file";
+}
+
 async function listResults(root, production) {
   const dir = join(root, "productions", production, "results");
   let names = [];
@@ -102,7 +111,14 @@ async function listResults(root, production) {
     try {
       const s = await stat(path);
       if (!s.isFile()) continue;
-      out.push({ name, rel: relative(root, path).split(sep).join("/"), bytes: s.size, mtime: s.mtime.toISOString() });
+      const type = MEDIA[extname(path).toLowerCase()] || (await sniffType(path));
+      out.push({
+        name,
+        rel: relative(root, path).split(sep).join("/"),
+        bytes: s.size,
+        mtime: s.mtime.toISOString(),
+        kind: await mediaKind(path, type),
+      });
     } catch {
       // 读不到就跳过
     }

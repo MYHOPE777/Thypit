@@ -86,13 +86,13 @@ function renderBuilds() {
     : `<tr><td colspan="5" class="dim">还没有 build（官方 builds 为空）</td></tr>`;
 }
 
-function mediaBlock(rel, name) {
-  const src = `/api/media?path=${encodeURIComponent(rel)}`;
-  const ext = rel.split(".").pop().toLowerCase();
-  if (["mp4", "webm", "mov"].includes(ext)) return `<video src="${src}" controls preload="metadata"></video>`;
-  if (["jpg", "jpeg", "png", "webp"].includes(ext)) return `<img src="${src}" alt="${esc(name)}" />`;
-  if (["wav", "mp3", "m4a"].includes(ext)) return `<audio src="${src}" controls></audio>`;
-  return `<a href="${src}" target="_blank" rel="noreferrer">${esc(name)}</a>`;
+// 类型由服务端按文件头判定（kind），不能只看扩展名：官方 output 常是 gen.video 这种无后缀名。
+function mediaBlock(item) {
+  const src = `/api/media?path=${encodeURIComponent(item.rel)}`;
+  if (item.kind === "video") return `<video src="${src}" controls preload="metadata"></video>`;
+  if (item.kind === "image") return `<img src="${src}" alt="${esc(item.name)}" />`;
+  if (item.kind === "audio") return `<audio src="${src}" controls></audio>`;
+  return `<a href="${src}" target="_blank" rel="noreferrer">${esc(item.name)}</a>`;
 }
 
 function renderResults() {
@@ -100,7 +100,7 @@ function renderResults() {
   const prods = state.data?.productions || [];
   const rows = prods.flatMap((p) => p.results.map((r) => ({ ...r, prod: p.name })));
   box.innerHTML = rows.length
-    ? rows.map((r) => `<figure class="res"><figcaption><b>${esc(r.name)}</b><span class="dim">${esc(r.prod)} · ${kb(r.bytes)} · ${esc(fmtTime(r.mtime))}</span></figcaption>${mediaBlock(r.rel, r.name)}</figure>`).join("")
+    ? rows.map((r) => `<figure class="res"><figcaption><b>${esc(r.name)}</b><span class="dim">${esc(r.prod)} · ${kb(r.bytes)} · ${esc(fmtTime(r.mtime))}</span></figcaption>${mediaBlock(r)}</figure>`).join("")
     : `<p class="dim">还没有取回的产物。Builds 里点「取回」。</p>`;
 }
 

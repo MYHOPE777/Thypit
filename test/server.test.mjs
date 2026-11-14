@@ -164,6 +164,11 @@ test("GET /api/media 越界被拒，静态页存在", async () => {
     const media = await fetch(`${base}/api/media?path=productions/promo/results/gen.video`);
     assert.equal(media.status, 200);
     assert.equal(media.headers.get("content-type"), "video/mp4");
+
+    // 页面靠 kind 选播放器：无扩展名的官方产物也要标成 video
+    const st = await (await fetch(`${base}/api/state`)).json();
+    const res = st.productions[0].results.find((r) => r.name === "gen.video");
+    assert.equal(res.kind, "video");
   } finally {
     server.close();
   }
