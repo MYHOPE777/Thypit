@@ -1,0 +1,16 @@
+node_modules/
+.DS_Store
+# 仓库只存代码：项目数据与产物一律不进 git
+projects/
+results/
+outputs/
+*.mp4
+*.mov
+*.webm
+*.wav
+*.mp3
+*.jpg
+*.jpeg
+*.png
+.hypit/
+.gen/
