@@ -37,25 +37,33 @@ export function planSummary(json = {}) {
 }
 
 export function pricingSummary(json = {}) {
-  const groups = (json.groups || []).map((g) => ({
-    capability: String(g.capability || ""),
-    endpoint: String(g.endpoint || ""),
-    use: String(g.use || ""),
-    status: String(g.status || ""),
-    binding: String(g.binding || ""),
-    pricingKind: String(g.pricing?.kind || ""),
-    pricingUrl: String(g.pricing?.url || ""),
-    requests: Array.isArray(g.requests) ? g.requests.length : 0,
-    documents: (g.pricingDocuments || []).map((d) => ({
+  const groups = (json.groups || []).map((g) => {
+    const documents = (g.pricingDocuments || []).map((d) => ({
       source: String(d.source || ""),
       summary: String(d.summary || ""),
-    })),
-  }));
+      free: d?.data?.pricing?.free === true,
+    }));
+    return {
+      capability: String(g.capability || ""),
+      endpoint: String(g.endpoint || ""),
+      use: String(g.use || ""),
+      status: String(g.status || ""),
+      binding: String(g.binding || ""),
+      pricingKind: String(g.pricing?.kind || ""),
+      pricingUrl: String(g.pricing?.url || ""),
+      requests: Array.isArray(g.requests) ? g.requests.length : 0,
+      free: documents.length > 0 && documents.every((d) => d.free),
+      documents,
+    };
+  });
+  const free = groups.length > 0 && groups.every((g) => g.free);
   return {
     format: "twb.pricing@1",
     run: String(json.run || ""),
     requests: num(json.requestCount),
     noCharge: num(json.noChargeRequestCount),
+    free,
+    freeRequests: groups.filter((g) => g.free).reduce((n, g) => n + g.requests, 0),
     groups,
     producerFailures: Array.isArray(json.producerFailures) ? json.producerFailures : [],
   };

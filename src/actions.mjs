@@ -154,15 +154,26 @@ export function writeReview(root, production, { buildId, output, verdict, note =
  * 取回目标路径：默认 productions/<t>/results/<output>；
  * 已存在时改成 <output>.<buildId8>，除非 force。
  */
+const MEDIA_EXT = { video: ".mp4", audio: ".mp3", image: ".png" };
+function mediaFileName(output) {
+  const dot = output.lastIndexOf(".");
+  if (dot < 0) return output;
+  const ext = output.slice(dot + 1);
+  return MEDIA_EXT[ext] ? output.slice(0, dot) + MEDIA_EXT[ext] : output;
+}
+
 export function resultTarget(root, production, output, buildId, { force = false } = {}) {
   const base = join(root, "productions", production, "results");
   mkdirSync(base, { recursive: true });
-  const wanted = join(base, output);
+  const wanted = join(base, mediaFileName(output));
   if (!existsSync(wanted) || force) return { path: wanted, renamed: false };
   const tag = String(buildId || "again").replace(/^bld_/, "").replace(/[^A-Za-z0-9]/g, "").slice(-8) || "again";
-  // 同名 build 反复取回时也要能找到空位，不覆盖、不报错
-  let candidate = `${wanted}.${tag}`;
-  for (let i = 2; existsSync(candidate); i++) candidate = `${wanted}.${tag}-${i}`;
+  // 同名 build 反复取回时也要能找到空位，不覆盖、不报错；tag 放在扩展名之前
+  const dot = wanted.lastIndexOf(".");
+  const stem = dot > 0 ? wanted.slice(0, dot) : wanted;
+  const ext = dot > 0 ? wanted.slice(dot) : "";
+  let candidate = `${stem}-${tag}${ext}`;
+  for (let i = 2; existsSync(candidate); i++) candidate = `${stem}-${tag}-${i}${ext}`;
   return { path: candidate, renamed: true };
 }
 

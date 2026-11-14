@@ -84,7 +84,7 @@ test("resultTarget 已存在时改名而不覆盖，force 则覆盖", () => {
   writeFileSync(first.path, "x");
   const second = resultTarget(root, "promo", "final.video", "bld_abcdef123");
   assert.equal(second.renamed, true);
-  assert.match(second.path, /final\.video\.[A-Za-z0-9]{8}$/);
+  assert.match(second.path, /final-[A-Za-z0-9]{8}\.mp4$/);
   writeFileSync(second.path, "x");
   const third = resultTarget(root, "promo", "final.video", "bld_abcdef123");
   assert.equal(third.renamed, true);

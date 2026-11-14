@@ -83,17 +83,20 @@ export function evaluateGate({ runRel, runStat = null, state = null, budgetCny =
   }
 
   const providerRequests = priced ? Math.max(0, (priced.requests || 0) - (priced.noCharge || 0)) : 0;
+  // 服务商自己声明免费（如 HypiHub fish voice-clone）时不算付费请求。
+  const freeRequests = priced ? Math.min(providerRequests, priced.freeRequests || 0) : 0;
+  const paidRequests = Math.max(0, providerRequests - freeRequests);
   const estimate = estimateCny === null || estimateCny === undefined || estimateCny === "" ? null : Number(estimateCny);
   if (estimate !== null && (!Number.isFinite(estimate) || estimate < 0)) {
     reasons.push(`--estimate 不是有效金额：${estimateCny}`);
     code ||= "BAD_ESTIMATE";
   }
-  if (providerRequests > 0 && estimate === null) {
-    reasons.push(`有 ${providerRequests} 次付费请求：必须用 --estimate <cny> 写明你确认的估算（官方不合计总价）`);
+  if (paidRequests > 0 && estimate === null) {
+    reasons.push(`有 ${paidRequests} 次付费请求：必须用 --estimate <cny> 写明你确认的估算（官方不合计总价）`);
     code ||= "NO_ESTIMATE";
   }
-  if (providerRequests === 0 && estimate === null) {
-    // 全本地/免费：估算记 0，不要求用户填
+  if (paidRequests === 0 && estimate === null) {
+    // 全本地/服务商声明免费：估算记 0，不要求用户填
   }
   const effective = estimate === null ? 0 : estimate;
   if (estimate !== null && effective > budgetCny) {
@@ -107,6 +110,8 @@ export function evaluateGate({ runRel, runStat = null, state = null, budgetCny =
     reasons,
     estimateCny: estimate,
     providerRequests,
+    paidRequests,
+    freeRequests,
     budgetCny,
     planned,
     priced,

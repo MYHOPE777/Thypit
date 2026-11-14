@@ -49,14 +49,16 @@ export function renderPlan(s = {}) {
 
 export function renderPricing(s = {}) {
   const lines = [];
-  lines.push(`run ${s.run || "?"} · ${s.requests} request(s) · ${s.noCharge} no charge`);
+  const freeNote = s.free ? " · 服务商声明免费" : "";
+  lines.push(`run ${s.run || "?"} · ${s.requests} request(s) · ${s.noCharge} no charge${freeNote}`);
   if (!s.groups.length) {
     lines.push("no chargeable requests (all local or free)");
   } else {
     lines.push(`groups (${s.groups.length}):`);
     for (const g of s.groups) {
       const price = g.pricingKind === "page" ? `page ${g.pricingUrl || "?"}` : g.pricingKind || "?";
-      lines.push(`  ${g.capability} → ${g.endpoint}  [${price}]  ×${g.requests}${g.binding ? `  binding=${g.binding}` : ""}`);
+      const tag = g.free ? "  [免费]" : "";
+      lines.push(`  ${g.capability} → ${g.endpoint}  [${price}]  ×${g.requests}${g.binding ? `  binding=${g.binding}` : ""}${tag}`);
       for (const d of g.documents) if (d.summary) lines.push(`    - ${d.summary} (${d.source})`);
     }
   }

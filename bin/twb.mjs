@@ -3,6 +3,7 @@
 // 不生成、不代理、不缓存官方结果。
 
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { existsSync, statSync } from "node:fs";
 import { findProject, listProject } from "../src/project.mjs";
 import { runHypit, runHypitStream, resolveHypit } from "../src/hypit.mjs";
 import { planSummary, pricingSummary, statusSummary, ledgerSummary } from "../src/report.mjs";
@@ -51,6 +52,11 @@ function usageError(msg) {
   const err = new Error(msg);
   err.status = 2;
   return err;
+}
+
+function need(value, msg) {
+  if (value === undefined || value === null || value === "" || value === false) throw usageError(msg);
+  return value;
 }
 
 const USAGE = `twb ${VERSION} · Hypit Workbench
@@ -118,7 +124,7 @@ async function main(argv) {
   const hypit = resolveHypit(root, flags.hypit);
 
   if (cmd === "check" || cmd === "plan" || cmd === "price") {
-    const runRel = relRun(root, _[1] || usageError(`${cmd} 需要 <run> 路径`));
+    const runRel = relRun(root, need(_[1], `${cmd} 需要 <run> 路径`));
     if (cmd === "check") {
       const r = await runHypit(hypit, ["check", runRel], { cwd: root, timeoutMs: 120000 });
       if (r.stdout.trim()) console.log(r.stdout.trim());
@@ -138,7 +144,7 @@ async function main(argv) {
   }
 
   if (cmd === "build") {
-    const runRel = relRun(root, _[1] || usageError("build 需要 <run> 路径"));
+    const runRel = relRun(root, need(_[1], "build 需要 <run> 路径"));
     if (flags.budget !== undefined && flags.budget !== "") {
       const prod = flags.production || productionOfRun(runRel);
       if (!prod) throw usageError("--budget 需要 run 在 productions/<name>/ 下，或加 --production");
@@ -148,7 +154,7 @@ async function main(argv) {
   }
 
   if (cmd === "status") {
-    const id = _[1] || usageError("status 需要 <buildId>");
+    const id = need(_[1], "status 需要 <buildId>");
     if (flags.watch) {
       const r = await runHypitStream(hypit, ["status", id, "--watch"], { cwd: root });
       if (r.code !== 0) process.exitCode = 1;
@@ -162,30 +168,37 @@ async function main(argv) {
   }
 
   if (cmd === "get") {
-    const id = _[1] || usageError("get 需要 <buildId>");
-    const output = flags.output || usageError("get 需要 --output <名>");
+    const id = need(_[1], "get 需要 <buildId>");
+    const output = need(flags.output || _[2], "get 需要 <output名>（位置参数或 --output）");
     const production = flags.production || productionByBuild(root, id);
     if (!production) throw usageError("找不到这个 build 属于哪个 production：加 --production <名>");
-    const target = flags.to
-      ? resolve(flags.to)
-      : resultTarget(root, production, output, id, { force: !!flags.force });
-    const json = await officialJson(root, hypit, ["get", id, "--output", output, "--to", target.path, "--json"]);
+    let targetPath;
+    let renamed = false;
+    if (flags.to) {
+      const wanted = resolve(flags.to);
+      targetPath = existsSync(wanted) && statSync(wanted).isDirectory() ? join(wanted, output) : wanted;
+    } else {
+      const target = resultTarget(root, production, output, id, { force: !!flags.force });
+      targetPath = target.path;
+      renamed = target.renamed === true;
+    }
+    const json = await officialJson(root, hypit, ["get", id, "--output", output, "--to", targetPath, "--json"]);
     const out = {
       format: "twb.get@1",
       buildId: id,
       production,
       output,
-      path: json.path || target.path,
-      renamed: target.renamed === true,
+      path: json.path || targetPath,
+      renamed,
     };
     console.log(flags.json ? JSON.stringify(out, null, 2) : `已取回 ${out.path}${out.renamed ? "（目标已存在，改用了带 build id 的文件名）" : ""}`);
     return;
   }
 
   if (cmd === "review") {
-    const id = _[1] || usageError("review 需要 <buildId>");
-    const output = _[2] || usageError("review 需要 <output>");
-    const verdict = flags.verdict || usageError("review 需要 --verdict approved|rejected|pending");
+    const id = need(_[1], "review 需要 <buildId>");
+    const output = need(_[2], "review 需要 <output>");
+    const verdict = need(flags.verdict, "review 需要 --verdict approved|rejected|pending");
     const production = flags.production || productionByBuild(root, id);
     if (!production) throw usageError("找不到这个 build 属于哪个 production：加 --production <名>");
     const out = writeReview(root, production, { buildId: id, output, verdict, note: flags.note, reviewer: flags.reviewer });
@@ -194,7 +207,7 @@ async function main(argv) {
   }
 
   if (cmd === "ledger") {
-    const production = _[1] || usageError("ledger 需要 <production>");
+    const production = need(_[1], "ledger 需要 <production>");
     if (flags.add !== undefined) {
       if (!flags.build) throw usageError("ledger --add 需要 --build <buildId>");
       const entry = {
@@ -216,7 +229,7 @@ async function main(argv) {
   }
 
   if (cmd === "studio") {
-    const runRel = relRun(root, _[1] || usageError("studio 需要 <run> 路径"));
+    const runRel = relRun(root, need(_[1], "studio 需要 <run> 路径"));
     const r = await runHypitStream(hypit, ["studio", "--run", runRel], { cwd: root });
     if (r.code !== 0) process.exitCode = 1;
     return;
@@ -250,7 +263,7 @@ async function buildFlow(root, hypit, runRel, flags) {
     run: runRel,
     plannedRequests: gate.planned?.requests?.total ?? 0,
     providerRequests: gate.providerRequests,
-    estimateCny: gate.estimateCny,
+    estimateCny: gate.estimateCny ?? (gate.paidRequests === 0 ? 0 : null),
     pricingDocs: (gate.priced?.groups || []).map((g) => g.pricingUrl).filter(Boolean),
     actualCny: null,
     note: "",
@@ -274,7 +287,8 @@ async function buildFlow(root, hypit, runRel, flags) {
     throw new Error("hypit build 没有返回 build id");
   }
   patchLedgerBuildId(root, production, entry.at, buildId);
-  console.log(`build 已提交：${buildId}（ledger 已记估算 ¥${gate.estimateCny ?? 0}）`);
+  const est = entry.estimateCny;
+  console.log(`build 已提交：${buildId}（ledger 已记估算 ¥${est ?? 0}${gate.paidRequests === 0 && !est ? "，服务商免费" : ""}）`);
 
   if (flags.noFollow || flags.json) {
     const json = await officialJson(root, hypit, ["status", buildId, "--json"]);
@@ -305,6 +319,7 @@ function relRun(root, p) {
 }
 
 main(process.argv.slice(2)).catch((err) => {
+  if (process.env.TWB_DEBUG) console.error(err.stack);
   console.error(err.status === 2 ? `twb: ${err.message}\n\n${USAGE}` : `twb: ${err.message}`);
   process.exitCode = err.status || 1;
 });

@@ -59,3 +59,22 @@ test("缺少价目记录 → NO_PRICE", () => {
   assert.equal(g.ok, false);
   assert.equal(g.code, "NO_PRICE");
 });
+
+test("服务商声明免费（pricing.free）→ 不要求估算直接放行", () => {
+  const freePrice = { format: "twb.pricing@1", requests: 9, noCharge: 0, freeRequests: 9, free: true, groups: [] };
+  const g = evaluateGate({ runRel: "runs/a.svrun", runStat: RUN_STAT, state: state({ pricing: freePrice }), budgetCny: 10 });
+  assert.equal(g.ok, true);
+  assert.equal(g.code, "OK");
+  assert.equal(g.providerRequests, 9);
+  assert.equal(g.freeRequests, 9);
+  assert.equal(g.paidRequests, 0);
+});
+
+test("部分免费 → 仍要求付费部分的估算", () => {
+  const mixed = { format: "twb.pricing@1", requests: 3, noCharge: 0, freeRequests: 1, groups: [] };
+  const g = evaluateGate({ runRel: "runs/a.svrun", runStat: RUN_STAT, state: state({ pricing: mixed }), budgetCny: 10 });
+  assert.equal(g.ok, false);
+  assert.equal(g.code, "NO_ESTIMATE");
+  assert.equal(g.paidRequests, 2);
+  assert.match(g.reasons.join("\n"), /2 次付费请求/);
+});

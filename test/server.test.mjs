@@ -139,7 +139,7 @@ test("POST /api/get 落盘并返回相对路径（get 不是 JSON 也不崩）",
     const res = await fetch(`${base}/api/get`, { method: "POST", body: JSON.stringify({ buildId: "bld_x", output: "gen.video", production: "promo" }) });
     assert.equal(res.status, 200);
     const out = await res.json();
-    assert.equal(out.path, "productions/promo/results/gen.video");
+    assert.equal(out.path, "productions/promo/results/gen.mp4");
     assert.ok(existsSync(join(root, out.path)));
   } finally {
     server.close();
