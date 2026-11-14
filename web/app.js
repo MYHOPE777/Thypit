@@ -77,7 +77,7 @@ function renderBuilds() {
         <td>${esc(b.outputCount ?? 0)} 个</td>
         <td class="ops">
           <button data-act="status">状态</button>
-          <input class="out" placeholder="输出名，如 gen.video" />
+          <input class="out" placeholder="输出名，如 gen.video" value="${esc(b.targets?.[0] || "")}" />
           <button data-act="get">取回</button>
           <select class="verdict"><option value="pending">pending</option><option value="approved">approved</option><option value="rejected">rejected</option></select>
           <button data-act="review">审</button>
@@ -162,7 +162,13 @@ async function runAction(act, runRel, prod, row) {
     return;
   }
   if (act === "price") {
-    const s = await post("/api/price", { run: runRel });
+    let s;
+    try {
+      s = await post("/api/price", { run: runRel });
+    } catch (err) {
+      log(`价目未知（不是免费）：${err.message}\nplan 仍可用；构建前必须有报价，否则闸门会拦。`);
+      return;
+    }
     if (!s.groups.length) {
       log(`报价 ${runRel}：全部本地，0 付费请求（${s.requests.total} 个请求，${s.noCharge} 个不收费）`);
       return;

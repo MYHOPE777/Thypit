@@ -197,8 +197,10 @@ export function createAppServer({ root, deps = {} } = {}) {
     "POST /api/price": async (_req, _url, data) => {
       const r = await hypit(["pricing", data.run, "--json"], { json: true });
       if (r.code !== 0 || !r.json) {
-        const err = new Error((r.stderr || "pricing 失败").trim().split("\n").slice(-3).join(" "));
+        // 价目未知 ≠ 免费：网络/Runtime/Provider 文档拿不到时明确区分，plan 仍然可用
+        const err = new Error((r.stderr || "pricing 失败").trim().split("\n").slice(-3).join(" ") || "官方没有返回价目");
         err.status = 502;
+        err.code = "PRICE_UNKNOWN";
         throw err;
       }
       const summary = pricingSummary(r.json);

@@ -146,6 +146,27 @@ test("POST /api/get 落盘并返回相对路径（get 不是 JSON 也不崩）",
   }
 });
 
+test("价目拿不到 → 502 PRICE_UNKNOWN（不是「免费」）", async () => {
+  const root = makeProject();
+  const server = createAppServer({
+    root,
+    deps: { hypit: async (args) => (args[0] === "pricing"
+      ? { code: 1, stdout: "", stderr: "network unreachable", json: null }
+      : { code: 0, stdout: "", stderr: "", json: { format: "hypit.cli-builds@1", builds: [] } }) },
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const res = await fetch(`${base}/api/price`, { method: "POST", body: JSON.stringify({ run: "productions/promo/runs/build.svrun" }) });
+    assert.equal(res.status, 502);
+    const out = await res.json();
+    assert.equal(out.error.code, "PRICE_UNKNOWN");
+    assert.match(out.error.message, /network unreachable/);
+  } finally {
+    server.close();
+  }
+});
+
 test("GET /api/media 越界被拒，静态页存在", async () => {
   const root = makeProject();
   const { server, base } = await listen(root);
