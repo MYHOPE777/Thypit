@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>twb · Hypit Workbench</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<header class="top">
+  <div class="brand">twb<span>Hypit Workbench</span></div>
+  <div class="proj"><b id="projName">…</b><code id="projRoot"></code></div>
+  <div class="acts">
+    <button id="refresh" class="ghost">刷新</button>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="side">
+    <section>
+      <h3>新建 production</h3>
+      <form id="newForm" class="row">
+        <input id="newName" placeholder="名字，如 promo" autocomplete="off" />
+        <input id="newBudget" type="number" step="0.5" min="0" placeholder="预算 ¥" />
+        <button>建</button>
+      </form>
+      <p id="newMsg" class="msg"></p>
+    </section>
+    <section>
+      <h3>项目树</h3>
+      <div id="tree" class="tree"></div>
+    </section>
+  </aside>
+
+  <main class="main">
+    <nav class="tabs" id="tabs">
+      <button data-tab="files" class="on">文件</button>
+      <button data-tab="builds">Builds</button>
+      <button data-tab="results">产物</button>
+      <button data-tab="ledger">花费</button>
+    </nav>
+
+    <section id="tab-files" class="tab on">
+      <div class="pane-head"><b id="fileTitle">选一个文件</b><span id="fileBytes" class="dim"></span></div>
+      <pre id="fileBody" class="file">左侧点 .md / .svml / .svrun / .json 预览。</pre>
+    </section>
+
+    <section id="tab-builds" class="tab">
+      <div class="pane-head"><b>Builds</b><span id="buildsMsg" class="dim"></span></div>
+      <table class="grid" id="buildsTable">
+        <thead><tr><th>build</th><th>创建</th><th>结果</th><th>产物</th><th>操作</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div id="log" class="log"></div>
+    </section>
+
+    <section id="tab-results" class="tab">
+      <div class="pane-head"><b>产物（productions/&lt;t&gt;/results）</b></div>
+      <div id="results" class="results"></div>
+    </section>
+
+    <section id="tab-ledger" class="tab">
+      <div class="pane-head"><b>花费（ledger.json，实付人工核对后填）</b></div>
+      <div id="ledger"></div>
+    </section>
+  </main>
+</div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

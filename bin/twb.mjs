@@ -13,11 +13,11 @@ import {
   readLedger, resultTarget, setBudget, writeReview,
 } from "../src/actions.mjs";
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 
 const VALUE_FLAGS = new Set([
   "project", "hypit", "estimate", "budget", "verdict", "note", "reviewer",
-  "output", "to", "production", "add", "title", "build",
+  "output", "to", "production", "add", "title", "build", "port",
 ]);
 const BOOL_FLAGS = new Set(["json", "help", "version", "force", "watch", "no-follow"]);
 
@@ -69,6 +69,7 @@ const USAGE = `twb ${VERSION} · Hypit Workbench
   review <buildId> <output> --verdict  写 review.json（approved|rejected|pending）
   ledger <production> [--add <cny>]    花费汇总 / 手工记实付
   studio <run>                         官方 Studio
+  serve [--port 4790]                  本地 Web 工作台（127.0.0.1）
 
 全局:
   --project <目录>   项目根（默认向上找 package.json 的 hypit.project）
@@ -99,6 +100,16 @@ async function main(argv) {
     const budget = flags.budget !== undefined ? Number(flags.budget) : undefined;
     const out = newProduction(root, name, { budgetCny: budget, title: flags.title });
     console.log(flags.json ? JSON.stringify(out, null, 2) : renderNew(out));
+    return;
+  }
+
+  if (cmd === "serve") {
+    const root = project?.root || flags.project;
+    if (!root) throw usageError("serve 需要在 Hypit 项目里，或加 --project <目录>");
+    const port = Number(flags.port || process.env.TWB_PORT || 4790);
+    if (!Number.isInteger(port) || port <= 0 || port > 65535) throw usageError(`端口不合法：${flags.port}`);
+    const { serve } = await import("../src/server.mjs");
+    serve({ root, port });
     return;
   }
 

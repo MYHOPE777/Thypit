@@ -224,7 +224,7 @@ build(run) 前置条件：
 
 - **M0（半天）**：`twb list/check/plan/price` + 项目发现 + JSON 输出稳定。（已完成）
 - **M1（半天）**：`twb build/status/get/review/ledger` + 预算闸门 + `twb new`。（已完成；真实 5s h3 冒烟一次，估算 ¥0.55）
-- **M2（半天）**：本地 Web（`twb serve`）：项目树、文件预览、Builds/Results、Review、Ledger、studio 按钮。
+- **M2（半天）**：本地 Web（`twb serve`）：项目树、文件预览、Builds/Results、Review、Ledger、studio 按钮。（已完成；`src/server.mjs` + `web/` 三个文件，测试 36 例）
 - **M3（可选）**：参考片下载（`hypit download`）、`hypit media probe/frames` 预览、多项目切换。
 
 每个里程碑结束跑 `node --test` 与一次真实官方调用（h3 5s，费用 ≤ ¥1，需你确认后才跑）。

@@ -42,3 +42,17 @@ test("runHypit 汇总 stdout/stderr/退出码，json 仅在成功时解析", asy
   assert.equal(r2.json, null);
   assert.match(r2.stderr, /oops/);
 });
+
+test("runHypit：--json 但输出不是 JSON 时 reject，不炸整进程", async () => {
+  const { mkdtempSync, writeFileSync, chmodSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = mkdtempSync(join(tmpdir(), "twb-bin-"));
+  const bin = join(dir, "fake-hypit");
+  writeFileSync(bin, "#!/bin/sh\necho '+ Exported gen.video'\n");
+  chmodSync(bin, 0o755);
+  await assert.rejects(() => runHypit(bin, ["get", "x"], { json: true }), /没有返回 JSON/);
+  const ok = await runHypit(bin, ["get", "x"]);
+  assert.equal(ok.code, 0);
+  assert.match(ok.stdout, /Exported/);
+});

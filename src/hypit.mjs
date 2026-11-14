@@ -75,8 +75,16 @@ export function runHypit(bin, args, { cwd = process.cwd(), timeoutMs = DEFAULT_T
         }
         const code = error ? (typeof error.code === "number" ? error.code : 1) : 0;
         const out = { code, stdout: String(stdout || ""), stderr: String(stderr || ""), json: null };
-        if (json && code === 0) out.json = parseJsonOutput(out.stdout, out.stderr);
-        else if (json && code !== 0) out.json = null;
+        if (json && code === 0) {
+          try {
+            out.json = parseJsonOutput(out.stdout, out.stderr);
+          } catch (err) {
+            reject(err);
+            return;
+          }
+        } else if (json && code !== 0) {
+          out.json = null;
+        }
         done(out);
       },
     );

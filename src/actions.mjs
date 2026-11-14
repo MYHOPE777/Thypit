@@ -160,7 +160,10 @@ export function resultTarget(root, production, output, buildId, { force = false 
   const wanted = join(base, output);
   if (!existsSync(wanted) || force) return { path: wanted, renamed: false };
   const tag = String(buildId || "again").replace(/^bld_/, "").replace(/[^A-Za-z0-9]/g, "").slice(-8) || "again";
-  return { path: `${wanted}.${tag}`, renamed: true };
+  // 同名 build 反复取回时也要能找到空位，不覆盖、不报错
+  let candidate = `${wanted}.${tag}`;
+  for (let i = 2; existsSync(candidate); i++) candidate = `${wanted}.${tag}-${i}`;
+  return { path: candidate, renamed: true };
 }
 
 /** 从 ledger 反查 build 属于哪个 production。 */

@@ -85,6 +85,10 @@ test("resultTarget 已存在时改名而不覆盖，force 则覆盖", () => {
   const second = resultTarget(root, "promo", "final.video", "bld_abcdef123");
   assert.equal(second.renamed, true);
   assert.match(second.path, /final\.video\.[A-Za-z0-9]{8}$/);
+  writeFileSync(second.path, "x");
+  const third = resultTarget(root, "promo", "final.video", "bld_abcdef123");
+  assert.equal(third.renamed, true);
+  assert.notEqual(third.path, second.path, "同一 build 再取回也要换新名字");
   const forced = resultTarget(root, "promo", "final.video", "bld_abcdef123", { force: true });
   assert.equal(forced.renamed, false);
 });
